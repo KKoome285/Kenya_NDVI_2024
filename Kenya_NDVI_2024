@@ -1,0 +1,35 @@
+var kenya = ee.FeatureCollection("FAO/GAUL/2015/level0")
+              .filter(ee.Filter.eq('ADM0_NAME', 'Kenya'));
+
+var startDate = '2024-01-01';
+var endDate = '2024-12-31';
+
+var s2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+            .filterDate(startDate, endDate)
+            .filterBounds(kenya)
+            .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20));
+
+function maskCloudsAndComputeNDVI(image) {
+  var cloudMask = image.select('SCL').neq(3) 
+                   .and(image.select('SCL').neq(8)) 
+                   .and(image.select('SCL').neq(9)); 
+
+  var ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI');
+
+  return image.updateMask(cloudMask).addBands(ndvi);
+}
+
+var ndviCollection = s2.map(maskCloudsAndComputeNDVI);
+
+var ndviMedian = ndviCollection.select('NDVI').median().clip(kenya);
+
+var ndviVis = {
+  min: 0,
+  max: 1,
+  palette: ['brown', 'yellow', 'green']
+};
+
+Map.centerObject(kenya, 6);
+Map.addLayer(ndviMedian, ndviVis, 'Kenya NDVI 2024');
+
+Map.addLayer(kenya.style({color: 'black', fillColor: '00000000'}), {}, 'Kenya Boundary');
